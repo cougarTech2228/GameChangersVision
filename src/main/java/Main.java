@@ -10,10 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-
-import java.util.HashMap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -21,6 +18,16 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+
+import org.opencv.core.KeyPoint;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfKeyPoint;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Point;
+import org.opencv.core.Rect;
+import org.opencv.core.RotatedRect;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
 
 import edu.wpi.cscore.MjpegServer;
 import edu.wpi.cscore.UsbCamera;
@@ -35,20 +42,6 @@ import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.vision.VisionThread;
 import vision.PowerTowerPipline;
 import vision.GalaticSearch;
-
-import org.opencv.core.*;
-import org.opencv.imgproc.*;
-
-import org.opencv.core.Core;
-import org.opencv.core.CvType;
-import org.opencv.core.Mat;
-import org.opencv.core.Rect;
-import org.opencv.core.Scalar;
-import org.opencv.core.Size;
-import org.opencv.dnn.Net;
-import org.opencv.dnn.Dnn;
-import org.opencv.imgproc.Imgproc;
-import org.opencv.imgcodecs.Imgcodecs;
 
 /*
    JSON format:
@@ -91,11 +84,6 @@ import org.opencv.imgcodecs.Imgcodecs;
 // *
 // **************************************************************************
 public final class Main {
-
-  static {
-    System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-  }
-
   public static final int MJPEG_OPENCV_SERVER_PORT = 1183;
   public static final double IMAGE_WIDTH_PIXELS = 640.0;
   public static final double IMAGE_HEIGHT_PIXELS = 480.0;
@@ -141,10 +129,6 @@ public final class Main {
   public static final double GS_X_OFFSET = 0;
   public static final double GS_SIZE_OFFSET = 0;
 
-  private static final Scalar MEAN = new Scalar(0.485, 0.456, 0.406);
-  private static final Scalar STD = new Scalar(0.229, 0.224, 0.225);
-  private static final double SCALE_FACTOR = 1 / 255.0;
-
   // When we were empirically collecting data for the distance calculation hash
   // map,
   // we observed that the actual measured distance between the front of the camera
@@ -177,8 +161,7 @@ public final class Main {
   public static List<Rect> targets = new ArrayList<>();
   public static List<RotatedRect> targetRects = new ArrayList<>();
 
- 
-
+  private static GalaticSearchNeuralNetwork galacticSearchNN = new GalaticSearchNeuralNetwork();
 
   private Main() {
   }
@@ -406,16 +389,7 @@ public final class Main {
       Scalar blackColor = new Scalar(0.0, 0.0, 0.0);
       Scalar purpleColor = new Scalar(255.0, 0.0, 255.0);
 
-      System.out.println("Reading CNN...");
-      Net cnn = Dnn.readNet("/home/pi/frc_mobilenetv2_frozen.pb");
-      System.out.println("Read CNN...");
 
-      System.out.println("Testing:");
-      doCNNTest(cnn, "test/redA.jpg", "RedA");
-      // doCNNTest(cnn, "test/redB.jpg", "RedB");
-      // doCNNTest(cnn, "test/blueA.jpg", "BlueA");
-      // doCNNTest(cnn, "test/blueB.jpg", "BlueB");
-      System.out.println("test Done");
       
       VisionThread galaticSearchThread = new VisionThread(frontCamera, new GalaticSearch(), pipeline -> {
           MatOfKeyPoint blobs = pipeline.findBlobsOutput();
@@ -515,13 +489,8 @@ public final class Main {
           System.out.println("Setting path: " + pathFind); 
           path.setString(pathFind);
           
-
           Mat openCVOverlay = pipeline.cvFlipOutput();
-          Mat inputBlob = getPreprocessedImage(openCVOverlay);
-
-          cnn.setInput(inputBlob);
-          Mat classification = cnn.forward();
-          String label = getPredictedClass(classification);
+          String label = galacticSearchNN.predictLabel(openCVOverlay);
 
           outputStream.putFrame(openCVOverlay);
           neuralNetwork.setString(label);
@@ -614,23 +583,23 @@ public final class Main {
         System.out.println("Waiting for Shuffleboard choice... Mode: " + visionMode);
 
         try {
-          Thread.sleep(100);
+          Thread.sleep(300);
         } catch (InterruptedException ex) {
           return;
         }
 
-        
-
         //System.out.println("Mode: " + visionMode);
-        if(visionMode.equals ("Galactic Search")){
-          galaticSearchThread.start();
-          System.out.println("Starting Galactic Search");
-        }
-        else if(visionMode.equals ("Power Tower")){
-          powerTowerThread.start();
-          System.out.println("Starting Power Tower");
-        } else {
-          visionMode = null;
+        if (visionMode != null) {
+          if(visionMode.equals ("Galactic Search")){
+            galaticSearchThread.start();
+            System.out.println("Starting Galactic Search");
+          }
+          else if(visionMode.equals ("Power Tower")){
+            powerTowerThread.start();
+            System.out.println("Starting Power Tower");
+          } else {
+            visionMode = null;
+          }
         }
       }
 
@@ -651,82 +620,4 @@ public final class Main {
       }
     }
   }
-  private static void doCNNTest(Net net, String path, String correct_label) {
-    long start = java.lang.System.currentTimeMillis();
-    // read and process the input image
-    Mat inputBlob = getPreprocessedImage(path);
-
-    net.setInput(inputBlob);
-    Mat classification = net.forward();
-    String label = getPredictedClass(classification);
-    long end = java.lang.System.currentTimeMillis();
-    if (label.equals(correct_label)) {
-      System.out.println(correct_label + ": PASS in " + (end - start) + "ms");
-    } else {
-      System.out.println(correct_label + ": FAIL in " + (end - start) + "ms " + "found " + label);
-    }
-  }
-
-  public static Mat centerCrop(Mat inputImage) {
-    int y1 = Math.round((inputImage.rows() - 224) / 2);
-    int y2 = Math.round(y1 + 224);
-    int x1 = Math.round((inputImage.cols() - 224) / 2);
-    int x2 = Math.round(x1 + 224);
-
-    Rect centerRect = new Rect(x1, y1, (x2 - x1), (y2 - y1));
-    Mat croppedImage = new Mat(inputImage, centerRect);
-
-    return croppedImage;
-  }
-
-  public static Mat getPreprocessedImage(Mat srcImage) {
-    // this object will store the preprocessed image
-    Mat image = new Mat();
-
-    // resize input image
-    Imgproc.resize(srcImage, image, new Size(256, 256));
-
-    // create empty Mat images for float conversions
-    Mat imgFloat = new Mat(image.rows(), image.cols(), CvType.CV_32FC3);
-
-    // convert input image to float type
-    image.convertTo(imgFloat, CvType.CV_32FC3, SCALE_FACTOR);
-
-    // crop input image
-    imgFloat = centerCrop(imgFloat);
-
-    // prepare DNN input
-    Mat blob = Dnn.blobFromImage(imgFloat, 1.0, /* default scalefactor */
-        new Size(224, 224), /* target size */
-        MEAN, /* mean */
-        true, /* swapRB */
-        false /* crop */
-    );
-
-    // divide on std
-    Core.divide(blob, STD, blob);
-
-    return blob;
-  }
-
-  public static Mat getPreprocessedImage(String imagePath) {
-    Mat imageRead;
-    // get the image from the internal resource folder
-    imageRead = Imgcodecs.imread(imagePath);
-    return getPreprocessedImage(imageRead);
-  }
-
-  public static String getPredictedClass(Mat classificationResult) {
-    ArrayList<String> imgLabels = new ArrayList<String>();
-    imgLabels.add("RedA");
-    imgLabels.add("RedB");
-    imgLabels.add("BlueA");
-    imgLabels.add("BlueB");
-
-    // obtain max prediction result
-    Core.MinMaxLocResult mm = Core.minMaxLoc(classificationResult);
-    double maxValIndex = mm.maxLoc.x;
-    return imgLabels.get((int) maxValIndex);
-  }
- 
 }
