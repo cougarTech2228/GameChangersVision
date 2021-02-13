@@ -22,6 +22,7 @@ remotes {
     host = 'wpilibpi.local'
     user = 'pi'
     password = 'raspberry'
+    knownHosts = allowAnyHosts
   }
 }
 
