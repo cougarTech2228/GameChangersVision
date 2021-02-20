@@ -337,16 +337,10 @@ public final class Main {
     NetworkTableEntry yEntryPT;
     NetworkTableEntry widthEntry;
     NetworkTableEntry heightEntry;
-    NetworkTableEntry numBlobs;
-    NetworkTableEntry size;
-    NetworkTableEntry distance;
     xEntryPT = table.getEntry("X");
     yEntryPT = table.getEntry("Y");
     widthEntry = table.getEntry("width");
     heightEntry = table.getEntry("height");
-    size = table.getEntry("size");
-    numBlobs = table.getEntry("NumBlobs");
-    distance = table.getEntry("distance");
 
     NetworkTable gsTable = ntinst.getTable("GalaticSearch");
     NetworkTableEntry gsX;
@@ -354,11 +348,13 @@ public final class Main {
     NetworkTableEntry gsSize;
     NetworkTableEntry path;
     NetworkTableEntry neuralNetwork;
+    NetworkTableEntry neuralNetworkConf;
     gsX = gsTable.getEntry("x");
     gsY = gsTable.getEntry("y");
     gsSize = gsTable.getEntry("size");
     path = gsTable.getEntry("path");
     neuralNetwork = gsTable.getEntry("Neural");
+    neuralNetworkConf = gsTable.getEntry("NeuralConf");
 
     CvSink cvSink = new CvSink("openCV Camera");
 
@@ -490,10 +486,11 @@ public final class Main {
           path.setString(pathFind);
           
           Mat openCVOverlay = pipeline.cvFlipOutput();
-          String label = galacticSearchNN.predictLabel(openCVOverlay);
+          GalaticSearchNeuralNetwork.Prediction prediction = galacticSearchNN.predictLabel(openCVOverlay);
 
           outputStream.putFrame(openCVOverlay);
-          neuralNetwork.setString(label);
+          neuralNetwork.setString(prediction.label);
+          neuralNetworkConf.setDouble(prediction.conf);
       });
 
       

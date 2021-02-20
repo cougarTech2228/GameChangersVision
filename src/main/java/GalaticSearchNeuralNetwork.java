@@ -17,11 +17,24 @@ public class GalaticSearchNeuralNetwork {
     private static final double SCALE_FACTOR = 1 / 255.0;
     private Net net;
 
+    ArrayList<String> imgLabels = new ArrayList<String>();
+
+
+    public class Prediction {
+        public String label;
+        public double conf;
+    }
+
     static {
         System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
     }
 
     public GalaticSearchNeuralNetwork() {
+        imgLabels.add("RedA");
+        imgLabels.add("RedB");
+        imgLabels.add("BlueA");
+        imgLabels.add("BlueB");
+
         System.out.println("Loading Neural Network...");
         net = Dnn.readNet("/home/pi/galactic_search.pb");
         System.out.println("Network Loaded.");
@@ -32,12 +45,17 @@ public class GalaticSearchNeuralNetwork {
      * @param image the full-sized image matrix from the camera
      * @return The detected text label for the image
      */
-    public String predictLabel(Mat image) {
+    public Prediction predictLabel(Mat image) {
         Mat inputBlob = getPreprocessedImage(image);
         net.setInput(inputBlob);
         Mat classification = net.forward();
-        String label = getPredictedClass(classification);
-        return label;
+        int index = getPredictedClass(classification);
+        String label = imgLabels.get(index);
+
+        Prediction predict = new Prediction();
+        predict.conf = classification.get(0, index)[0];
+        predict.label = label;
+        return predict;
     }
 
     private static Mat centerCrop(Mat inputImage) {
@@ -104,16 +122,10 @@ public class GalaticSearchNeuralNetwork {
      * @param classificationResult The result returned from the network prediction
      * @return The text label
      */
-    private static String getPredictedClass(Mat classificationResult) {
-        ArrayList<String> imgLabels = new ArrayList<String>();
-        imgLabels.add("RedA");
-        imgLabels.add("RedB");
-        imgLabels.add("BlueA");
-        imgLabels.add("BlueB");
-
+    private static int getPredictedClass(Mat classificationResult) {
         // obtain max prediction result
         Core.MinMaxLocResult mm = Core.minMaxLoc(classificationResult);
         double maxValIndex = mm.maxLoc.x;
-        return imgLabels.get((int) maxValIndex);
+        return (int)maxValIndex;
     }
 }
