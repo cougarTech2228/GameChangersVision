@@ -46,13 +46,15 @@ task deploy {
           execute 'rm opencv-4.5.1.tgz'
         }
 
-        try {
-          execute('ls galactic_search.pb > /dev/null')
-        } catch (BadExitException) {
-          // neural net doesn't exist, copy it over
-          println "Copying Neural Network"
-          put from: files('neuralNetwork/models/galactic_search.pb'), into: '/home/pi/'
-        }
+        // try {
+        //   execute('ls galactic_search.pb > /dev/null')
+        // } catch (BadExitException) {
+        //   // neural net doesn't exist, copy it over
+        //   println "Copying Neural Network"
+        //   put from: files('neuralNetwork/models/galactic_search.pb'), into: '/home/pi/'
+        // }
+        println "Copying Neural Network"
+        put from: files('neuralNetwork/models/galactic_search.pb'), into: '/home/pi/'
 
         println "Copying application..."
         put from: files('runCamera', "$buildDir/libs/cougarTech-all.jar"), into: '/home/pi/'

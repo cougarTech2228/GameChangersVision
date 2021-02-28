@@ -50,7 +50,7 @@ public class PowerTowerPipline implements VisionPipeline {
 
 		// Step CV_flip0:
 		Mat cvFlipSrc = cvTransposeOutput;
-		FlipCode cvFlipFlipcode = FlipCode.Y_AXIS;
+		FlipCode cvFlipFlipcode = FlipCode.X_AXIS;
 		cvFlip(cvFlipSrc, cvFlipFlipcode, cvFlipOutput);
 
 		// Step HSV_Threshold0:

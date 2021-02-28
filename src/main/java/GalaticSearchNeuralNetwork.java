@@ -30,10 +30,10 @@ public class GalaticSearchNeuralNetwork {
     }
 
     public GalaticSearchNeuralNetwork() {
-        imgLabels.add("RedA");
-        imgLabels.add("RedB");
-        imgLabels.add("BlueA");
-        imgLabels.add("BlueB");
+        imgLabels.add("aRed");
+        imgLabels.add("bRed");
+        imgLabels.add("aBlue");
+        imgLabels.add("bBlue");
 
         System.out.println("Loading Neural Network...");
         net = Dnn.readNet("/home/pi/galactic_search.pb");
