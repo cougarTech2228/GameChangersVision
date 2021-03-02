@@ -337,10 +337,12 @@ public final class Main {
     NetworkTableEntry yEntryPT;
     NetworkTableEntry widthEntry;
     NetworkTableEntry heightEntry;
+    NetworkTableEntry xOffset;
     xEntryPT = table.getEntry("X");
     yEntryPT = table.getEntry("Y");
     widthEntry = table.getEntry("width");
     heightEntry = table.getEntry("height");
+    xOffset = table.getEntry("xOffset");
 
     NetworkTable gsTable = ntinst.getTable("GalaticSearch");
     NetworkTableEntry gsX;
@@ -500,9 +502,10 @@ public final class Main {
         //cvSink.grabFrame(openCVOverlay);
         Mat openCVOverlay = pipeline.cvFlipOutput();
 
+        double xOff = xOffset.getDouble(0);
         // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
-        Imgproc.line(openCVOverlay, new Point(IMAGE_HEIGHT_PIXELS / 2, 25),
-            new Point(IMAGE_HEIGHT_PIXELS / 2, IMAGE_WIDTH_PIXELS - 10), greenColor, 3, 4);
+        Imgproc.line(openCVOverlay, new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, 25),
+            new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, IMAGE_WIDTH_PIXELS - 10), greenColor, 3, 4);
 
         ArrayList<MatOfPoint> convexHullsOutput = pipeline.convexHullsOutput();
 
