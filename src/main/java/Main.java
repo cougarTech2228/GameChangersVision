@@ -34,12 +34,14 @@ import edu.wpi.cscore.UsbCamera;
 import edu.wpi.cscore.VideoSource;
 import edu.wpi.cscore.CvSource;
 import edu.wpi.cscore.CvSink;
-import edu.wpi.cscore.VideoMode.PixelFormat;   
+import edu.wpi.cscore.VideoMode.PixelFormat;
 import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.vision.VisionThread;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import vision.PowerTowerPipline;
 import vision.GalaticSearch;
 
@@ -331,18 +333,21 @@ public final class Main {
       cameras.add(startCamera(cameraConfig));
     }
 
+    ShuffleboardTab tab = Shuffleboard.getTab("Power Tower");
+    NetworkTableEntry xOffset = tab.add("PT Offset", 0).getEntry();
+
     NetworkTable table = ntinst.getTable("PowerTower");
 
     NetworkTableEntry xEntryPT;
     NetworkTableEntry yEntryPT;
     NetworkTableEntry widthEntry;
     NetworkTableEntry heightEntry;
-    NetworkTableEntry xOffset;
+    NetworkTableEntry difference;
     xEntryPT = table.getEntry("X");
     yEntryPT = table.getEntry("Y");
     widthEntry = table.getEntry("width");
     heightEntry = table.getEntry("height");
-    xOffset = table.getEntry("xOffset");
+    difference = table.getEntry("difference");
 
     NetworkTable gsTable = ntinst.getTable("GalaticSearch");
     NetworkTableEntry gsX;
@@ -502,10 +507,11 @@ public final class Main {
         //cvSink.grabFrame(openCVOverlay);
         Mat openCVOverlay = pipeline.cvFlipOutput();
 
-        double xOff = xOffset.getDouble(0);
+        double xOff = xOffset.getDouble(0.0);
         // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
         Imgproc.line(openCVOverlay, new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, 25),
             new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, IMAGE_WIDTH_PIXELS - 10), greenColor, 3, 4);
+            double greenX = (IMAGE_HEIGHT_PIXELS / 2) + xOff;
 
         ArrayList<MatOfPoint> convexHullsOutput = pipeline.convexHullsOutput();
 
@@ -564,10 +570,11 @@ public final class Main {
           new Point((minx + width/2), 25),
           new Point((minx + width/2), IMAGE_WIDTH_PIXELS - 10),
           redColor, 3, 4);
-
+          double redX = minx + width/2;
         // This overlays all of the OpenCV stuff (bounding rectangles, text, etc.) over
         // the streaming image
         outputStream.putFrame(openCVOverlay);
+        difference.setDouble(greenX - redX);
       });
 
       
