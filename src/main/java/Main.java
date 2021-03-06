@@ -301,7 +301,26 @@ public final class Main {
   // * Main Method
   // *
   // **************************************************************************
-
+  public static NetworkTableEntry xEntryPT;
+  public static NetworkTableEntry yEntryPT;
+  public static NetworkTableEntry widthEntry;
+  public static NetworkTableEntry heightEntry;
+  public static NetworkTableEntry xOffset;
+  public static NetworkTableEntry gsX;
+  public static NetworkTableEntry gsY;
+  public static NetworkTableEntry gsSize;
+  public static NetworkTableEntry path;
+  public static NetworkTableEntry neuralNetwork;
+  public static  NetworkTableEntry neuralNetworkConf;
+  public static VideoSource frontCamera;
+  public static CvSource outputStream;
+  public static Scalar greenColor;
+  public static Scalar redColor;
+  public static Scalar blueColor;
+  public static Scalar blackColor;
+  public static Scalar purpleColor;
+  public static VisionThread galaticSearchThread;
+  public static VisionThread powerTowerThread;
 
   public static void main(String... args) {
     if (args.length > 0) {
@@ -333,11 +352,7 @@ public final class Main {
 
     NetworkTable table = ntinst.getTable("PowerTower");
 
-    NetworkTableEntry xEntryPT;
-    NetworkTableEntry yEntryPT;
-    NetworkTableEntry widthEntry;
-    NetworkTableEntry heightEntry;
-    NetworkTableEntry xOffset;
+
     xEntryPT = table.getEntry("X");
     yEntryPT = table.getEntry("Y");
     widthEntry = table.getEntry("width");
@@ -345,12 +360,7 @@ public final class Main {
     xOffset = table.getEntry("xOffset");
 
     NetworkTable gsTable = ntinst.getTable("GalaticSearch");
-    NetworkTableEntry gsX;
-    NetworkTableEntry gsY;
-    NetworkTableEntry gsSize;
-    NetworkTableEntry path;
-    NetworkTableEntry neuralNetwork;
-    NetworkTableEntry neuralNetworkConf;
+
     gsX = gsTable.getEntry("x");
     gsY = gsTable.getEntry("y");
     gsSize = gsTable.getEntry("size");
@@ -369,10 +379,10 @@ public final class Main {
       // a "sink" or "destination" which will be an ouputStream that is fed into 
       // an MJPEG Server. 
       // TODO - this will always get the first camera detected and that may be the back camera which is no bueno
-      VideoSource frontCamera = cameras.get(0);
+      frontCamera = cameras.get(0);
 
       cvSink.setSource(frontCamera);
-      CvSource outputStream = new CvSource("2228_OpenCV", PixelFormat.kMJPEG, (int) IMAGE_WIDTH_PIXELS,
+      outputStream = new CvSource("2228_OpenCV", PixelFormat.kMJPEG, (int) IMAGE_WIDTH_PIXELS,
           (int) IMAGE_HEIGHT_PIXELS, DEFAULT_FRAME_RATE);
 
       // This is MJPEG server used to create an overlaid image of what the OpenCV processing is 
@@ -381,206 +391,45 @@ public final class Main {
       mjpegServer2.setSource(outputStream);
 
       // Just some color constants for later use in drawing contour overlays and text
-      Scalar greenColor = new Scalar(0.0, 255.0, 0.0);
-      Scalar redColor = new Scalar(0.0, 0.0, 255.0);
-      Scalar blueColor = new Scalar(255.0, 0.0, 0.0);
-      Scalar blackColor = new Scalar(0.0, 0.0, 0.0);
-      Scalar purpleColor = new Scalar(255.0, 0.0, 255.0);
+      greenColor = new Scalar(0.0, 255.0, 0.0);
+      redColor = new Scalar(0.0, 0.0, 255.0);
+      blueColor = new Scalar(255.0, 0.0, 0.0);
+      blackColor = new Scalar(0.0, 0.0, 0.0);
+      purpleColor = new Scalar(255.0, 0.0, 255.0);
 
+     galaticSearchThread = null;
+     powerTowerThread = null;
+      
+      galaticSearchThread = makeGalacticSearch();
 
       
-      VisionThread galaticSearchThread = new VisionThread(frontCamera, new GalaticSearch(), pipeline -> {
-          MatOfKeyPoint blobs = pipeline.findBlobsOutput();
-          List<KeyPoint> keyPoints = blobs.toList();
-          int num = keyPoints.size();
-          //List<Number> xArray = new ArrayList<>();
-          //List<Number> yArray = new ArrayList<>();
-          //List<Number> sizeArray = new ArrayList<>();
-
-          //System.out.println(num);
-          Number xArray[] = new Number[num];
-          Number yArray[] = new Number[num];
-          Number sizeArray[] = new Number[num];
-
-          String pathFind = "noPath";
-          int minSize = 9999;
-          int maxSize = 0;
-          int maxGSX = 0;
-          int minGSX = 9999;
-          int left =0;
-          int middle =0;
-          int right =0;
-          int i=0;
-          for(KeyPoint point : keyPoints) {
-            //xArray.add(point.pt.x);
-            xArray[i] = point.pt.x;
-            yArray[i] = point.pt.y;
-            sizeArray[i] = point.size;
-
-            if(point.size < minSize){
-              minSize = (int)point.size;
-            }
-            if(point.size > maxSize){
-              maxSize = (int)point.size;
-            }
-            if(point.pt.x < minGSX){
-              left = i;
-              minGSX = (int)point.pt.x;
-            }
-            if(point.pt.x > maxGSX){
-              right = i;
-              maxGSX = (int)point.pt.x;
-            }
-            i++;
-          }
-
-          if(num == 3){
-            if (left == 0 && right == 2){
-              middle = 1;
-            }
-            else if(left ==2 && right == 0){
-              middle = 1;
-            }
-            else if(left == 0 && right == 1){
-              middle = 2;
-            }
-            else if(left == 1 && right == 0){
-              middle = 2;
-            }
-            else if(left == 1 && right == 2){
-              middle = 0;
-            }
-            else if(left == 2 && right == 1){
-              middle = 0;
-            }
-            if(maxSize - minSize >= (15 + GS_SIZE_OFFSET)){ //Red path
-
-              if(xArray[middle].intValue() - xArray[left].intValue() > (120 + GS_X_OFFSET)){ // A path
-                //System.out.println("A red path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
-                pathFind = "aRed";
-              }
-              else{ // B path
-                //System.out.println("B red path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
-                pathFind = "bRed";
-              }
-
-            }
-            else{ //Blue path
-
-              if(xArray[right].intValue() - xArray[middle].intValue() > (120 + GS_X_OFFSET)){ // A path
-                //System.out.println("A blue path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
-                pathFind = "aBlue";
-              }
-              else{ // B path
-                //System.out.println("B blue path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
-                pathFind = "bBlue";
-              }
-
-            }
-          }
-          else{
-            //System.out.println("sees " + num + " balls");
-          }
-          gsX.setNumberArray(xArray);
-          gsY.setNumberArray(yArray);
-          gsSize.setNumberArray(sizeArray);
-          System.out.println("Setting path: " + pathFind); 
-          path.setString(pathFind);
-          
-          Mat openCVOverlay = pipeline.cvFlipOutput();
-          GalaticSearchNeuralNetwork.Prediction prediction = galacticSearchNN.predictLabel(openCVOverlay);
-
-          outputStream.putFrame(openCVOverlay);
-          neuralNetwork.setString(prediction.label);
-          neuralNetworkConf.setDouble(prediction.conf);
-      });
+      powerTowerThread = makePowerTower();
 
       
-      VisionThread powerTowerThread = new VisionThread(frontCamera, new PowerTowerPipline(), pipeline -> {
-
-        // This grabs a snapshot of the live image currently being streamed
-        //cvSink.grabFrame(openCVOverlay);
-        Mat openCVOverlay = pipeline.cvFlipOutput();
-
-        double xOff = xOffset.getDouble(0);
-        // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
-        Imgproc.line(openCVOverlay, new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, 25),
-            new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, IMAGE_WIDTH_PIXELS - 10), greenColor, 3, 4);
-
-        ArrayList<MatOfPoint> convexHullsOutput = pipeline.convexHullsOutput();
-
-        double minx = 99999;
-        double miny = 99999;
-        double maxx = 0;
-        double maxy = 0;
-        double width;
-        double height;
-
-
-        for (MatOfPoint points : convexHullsOutput) {
-          double current_min_x = minx;
-          double current_min_y = miny;
-          double current_max_x = maxx;
-          double current_max_y = maxy;
-          boolean isValid = true;
-          for (Point point : points.toArray()) {
-            if(point.y < 10){
-              isValid = false;
-              break;
-            }
-            if(point.x < minx){
-              minx = point.x;
-            }
-            if(point.x > maxx){
-              maxx = point.x;
-            }
-            if(point.y < miny){
-              miny = point.y;
-            }
-            if(point.y < maxy){
-              maxy = point.y;
-            }
-          }
-          if(isValid == false){
-            minx = current_min_x;
-            maxx = current_max_x;
-            miny = current_min_y;
-            maxy = current_max_y;
-          }
-        }
-        width = maxx - minx;
-        height = maxy - miny;
-
-        //System.out.println("X: " + minx);
-        xEntryPT.setDouble(minx);
-        yEntryPT.setDouble(miny);
-        widthEntry.setDouble(width);
-        heightEntry.setDouble(height);
-
-        // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
-        //PI CAMERA EXPOSURE NEEDS TO BE CHANGED.
-        //TURN ON MANUAL EXPOSURE, AND EXPOSURE 5
-        Imgproc.line(openCVOverlay,
-          new Point((minx + width/2), 25),
-          new Point((minx + width/2), IMAGE_WIDTH_PIXELS - 10),
-          redColor, 3, 4);
-
-        // This overlays all of the OpenCV stuff (bounding rectangles, text, etc.) over
-        // the streaming image
-        outputStream.putFrame(openCVOverlay);
-      });
-
       
+        
+      
+
+    } else {
+      System.out.println("No cameras found");
+    }
+    // **************************************************************************
+    // *
+    // * Main "Forever" Loop
+    // *
+    // **************************************************************************
+    String previousSelected = null;
+    Thread currentVisionThread = null;
+    String visionMode = null;
+    for (;;) {
+
       NetworkTable visionModeTable = ntinst.getTable("Vision Mode");
       NetworkTableEntry selected;
       selected = visionModeTable.getEntry("selected");
       // Start the thread's execution. Runs continuously until the program is terminated
 
-      String visionMode = null;
-      while( visionMode == null){
-
         visionMode = selected.getString(null); 
-        System.out.println("Waiting for Shuffleboard choice... Mode: " + visionMode);
+        //System.out.println("Waiting for Shuffleboard choice... Mode: " + visionMode);
 
         try {
           Thread.sleep(300);
@@ -589,35 +438,248 @@ public final class Main {
         }
 
         //System.out.println("Mode: " + visionMode);
-        if (visionMode != null) {
-          if(visionMode.equals ("Galactic Search")){
-            galaticSearchThread.start();
-            System.out.println("Starting Galactic Search");
+          if(!visionMode.equals(previousSelected)){
+            //this is the first time getting a mode
+            if(previousSelected == null){
+                if(visionMode.equals ("Galactic Search")){
+                  galaticSearchThread.start();
+                  currentVisionThread = galaticSearchThread;
+                  System.out.println("Starting Galactic Search");
+                }
+                else if(visionMode.equals ("Power Tower")){
+                  powerTowerThread.start();
+                  currentVisionThread = powerTowerThread;
+                  System.out.println("Starting Power Tower");
+                } else {
+                  visionMode = "other path we don't want";
+                  currentVisionThread = null;
+                }
+            }
+            //the mode has been changed, must destroy old thread
+             else{
+               try{
+              currentVisionThread.stop();
+              System.out.println("Stopping path");
+              currentVisionThread.join();
+              System.out.println("Path Stopped");
+               }
+               catch(Exception e){
+               }
+                if(visionMode.equals ("Galactic Search")){
+                  galaticSearchThread = makeGalacticSearch();
+                  galaticSearchThread.start();
+                  System.out.println("Starting Galactic Search");
+                  currentVisionThread = galaticSearchThread;
+                  System.out.println("Started Galactic Search");
+                }
+                else if(visionMode.equals ("Power Tower")){
+                  powerTowerThread = makePowerTower();
+                  powerTowerThread.start();
+                  System.out.println("Starting Power Tower");
+                  currentVisionThread = powerTowerThread;
+                  System.out.println("Started Power Tower");
+                } else {
+                  visionMode = "other path we don't want";
+                  
+                  currentVisionThread = null;
+                  System.out.println("Not a valid path");
+                }
+            }
           }
-          else if(visionMode.equals ("Power Tower")){
-            powerTowerThread.start();
-            System.out.println("Starting Power Tower");
-          } else {
-            visionMode = null;
-          }
+          previousSelected = visionMode;
+          //System.out.println("Vision mode: " + visionMode);
+          //System.out.println("Previous mode: " + previousSelected);
+        
+      
+        }
+  
+}
+private static VisionThread makeGalacticSearch(){
+  return new VisionThread(frontCamera, new GalaticSearch(), pipeline -> {
+    MatOfKeyPoint blobs = pipeline.findBlobsOutput();
+    List<KeyPoint> keyPoints = blobs.toList();
+    int num = keyPoints.size();
+    //List<Number> xArray = new ArrayList<>();
+    //List<Number> yArray = new ArrayList<>();
+    //List<Number> sizeArray = new ArrayList<>();
+
+    //System.out.println(num);
+    Number xArray[] = new Number[num];
+    Number yArray[] = new Number[num];
+    Number sizeArray[] = new Number[num];
+
+    String pathFind = "noPath";
+    int minSize = 9999;
+    int maxSize = 0;
+    int maxGSX = 0;
+    int minGSX = 9999;
+    int left =0;
+    int middle =0;
+    int right =0;
+    int i=0;
+    for(KeyPoint point : keyPoints) {
+      //xArray.add(point.pt.x);
+      xArray[i] = point.pt.x;
+      yArray[i] = point.pt.y;
+      sizeArray[i] = point.size;
+
+      if(point.size < minSize){
+        minSize = (int)point.size;
+      }
+      if(point.size > maxSize){
+        maxSize = (int)point.size;
+      }
+      if(point.pt.x < minGSX){
+        left = i;
+        minGSX = (int)point.pt.x;
+      }
+      if(point.pt.x > maxGSX){
+        right = i;
+        maxGSX = (int)point.pt.x;
+      }
+      i++;
+    }
+
+    if(num == 3){
+      if (left == 0 && right == 2){
+        middle = 1;
+      }
+      else if(left ==2 && right == 0){
+        middle = 1;
+      }
+      else if(left == 0 && right == 1){
+        middle = 2;
+      }
+      else if(left == 1 && right == 0){
+        middle = 2;
+      }
+      else if(left == 1 && right == 2){
+        middle = 0;
+      }
+      else if(left == 2 && right == 1){
+        middle = 0;
+      }
+      if(maxSize - minSize >= (15 + GS_SIZE_OFFSET)){ //Red path
+
+        if(xArray[middle].intValue() - xArray[left].intValue() > (120 + GS_X_OFFSET)){ // A path
+          //System.out.println("A red path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          pathFind = "aRed";
+        }
+        else{ // B path
+          //System.out.println("B red path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          pathFind = "bRed";
+        }
+
+      }
+      else{ //Blue path
+
+        if(xArray[right].intValue() - xArray[middle].intValue() > (120 + GS_X_OFFSET)){ // A path
+          //System.out.println("A blue path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          pathFind = "aBlue";
+        }
+        else{ // B path
+          //System.out.println("B blue path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          pathFind = "bBlue";
+        }
+
+      }
+    }
+    else{
+      //System.out.println("sees " + num + " balls");
+    }
+    gsX.setNumberArray(xArray);
+    gsY.setNumberArray(yArray);
+    gsSize.setNumberArray(sizeArray);
+    System.out.println("Setting path: " + pathFind); 
+    path.setString(pathFind);
+    
+    Mat openCVOverlay = pipeline.cvFlipOutput();
+    GalaticSearchNeuralNetwork.Prediction prediction = galacticSearchNN.predictLabel(openCVOverlay);
+
+    outputStream.putFrame(openCVOverlay);
+    neuralNetwork.setString(prediction.label);
+    neuralNetworkConf.setDouble(prediction.conf);
+});
+}
+private static VisionThread makePowerTower(){
+  return new VisionThread(frontCamera, new PowerTowerPipline(), pipeline -> {
+
+    // This grabs a snapshot of the live image currently being streamed
+    //cvSink.grabFrame(openCVOverlay);
+    Mat openCVOverlay = pipeline.cvFlipOutput();
+
+    double xOff = xOffset.getDouble(0);
+    // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
+    Imgproc.line(openCVOverlay, new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, 25),
+        new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, IMAGE_WIDTH_PIXELS - 10), greenColor, 3, 4);
+
+    ArrayList<MatOfPoint> convexHullsOutput = pipeline.convexHullsOutput();
+
+    double minx = 99999;
+    double miny = 99999;
+    double maxx = 0;
+    double maxy = 0;
+    double width;
+    double height;
+
+
+    for (MatOfPoint points : convexHullsOutput) {
+      double current_min_x = minx;
+      double current_min_y = miny;
+      double current_max_x = maxx;
+      double current_max_y = maxy;
+      boolean isValid = true;
+      for (Point point : points.toArray()) {
+        if(point.y < 10){
+          isValid = false;
+          break;
+        }
+        if(point.x < minx){
+          minx = point.x;
+        }
+        if(point.x > maxx){
+          maxx = point.x;
+        }
+        if(point.y < miny){
+          miny = point.y;
+        }
+        if(point.y < maxy){
+          maxy = point.y;
         }
       }
-
-    } else {
-      System.out.println("No cameras found");
-    }
-
-    // **************************************************************************
-    // *
-    // * Main "Forever" Loop
-    // *
-    // **************************************************************************
-    for (;;) {
-      try {
-        Thread.sleep(10000);
-      } catch (InterruptedException ex) {
-        return;
+      if(isValid == false){
+        minx = current_min_x;
+        maxx = current_max_x;
+        miny = current_min_y;
+        maxy = current_max_y;
       }
     }
-  }
+    width = maxx - minx;
+    height = maxy - miny;
+
+    //System.out.println("X: " + minx);
+    xEntryPT.setDouble(minx);
+    yEntryPT.setDouble(miny);
+    widthEntry.setDouble(width);
+    heightEntry.setDouble(height);
+
+    // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
+    //PI CAMERA EXPOSURE NEEDS TO BE CHANGED.
+    //TURN ON MANUAL EXPOSURE, AND EXPOSURE 5
+    Imgproc.line(openCVOverlay,
+      new Point((minx + width/2), 25),
+      new Point((minx + width/2), IMAGE_WIDTH_PIXELS - 10),
+      redColor, 3, 4);
+
+    // This overlays all of the OpenCV stuff (bounding rectangles, text, etc.) over
+    // the streaming image
+    outputStream.putFrame(openCVOverlay);
+  });
 }
+}
+
+
+
+
+
+  
