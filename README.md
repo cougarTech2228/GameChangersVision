@@ -6,7 +6,7 @@ This project contains the wpilibip vision code for the 2021 FRC season
 ## Important Components
 
 - `./src/` Java source code for the vision application
-- `./neuralNetwork/` A self-contained Jupyter notebook for training and saving the convolutional neural network (CNN) used in the galatic search challange
+- `./neuralNetwork/` A self-contained Jupyter notebook for training and saving the convolutional neural network (CNN) used in the galactic search challange
 - `./opencv-4.5.1.tgz` A full distribution of OpenCV 4.5.1 compiled to execute on the Raspberry Pi ARM platform
 
 ## Building and Deploying

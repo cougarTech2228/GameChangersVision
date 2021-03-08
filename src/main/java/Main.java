@@ -31,6 +31,7 @@ import org.opencv.imgproc.Imgproc;
 
 import edu.wpi.cscore.MjpegServer;
 import edu.wpi.cscore.UsbCamera;
+import edu.wpi.cscore.VideoCamera;
 import edu.wpi.cscore.VideoSource;
 import edu.wpi.cscore.CvSource;
 import edu.wpi.cscore.CvSink;
@@ -43,7 +44,9 @@ import edu.wpi.first.vision.VisionThread;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import vision.PowerTowerPipline;
-import vision.GalaticSearch;
+import vision.GalacticSearch;
+
+
 
 /*
    JSON format:
@@ -131,6 +134,9 @@ public final class Main {
   public static final double GS_X_OFFSET = 0;
   public static final double GS_SIZE_OFFSET = 0;
 
+  public static final int PT_CAMERA_EXPOSURE = 5;
+  public static final int GS_CAMERA_EXPOSURE = -1; //-1 means auto
+
   // When we were empirically collecting data for the distance calculation hash
   // map,
   // we observed that the actual measured distance between the front of the camera
@@ -163,7 +169,9 @@ public final class Main {
   public static List<Rect> targets = new ArrayList<>();
   public static List<RotatedRect> targetRects = new ArrayList<>();
 
-  private static GalaticSearchNeuralNetwork galacticSearchNN = new GalaticSearchNeuralNetwork();
+  private static GalacticSearchNeuralNetwork galacticSearchNN = new GalacticSearchNeuralNetwork();
+
+  static List<VideoCamera> cameras = new ArrayList<>();
 
   private Main() {
   }
@@ -281,7 +289,7 @@ public final class Main {
   // * Start running the camera
   // *
   // **************************************************************************
-  public static VideoSource startCamera(CameraConfig config) {
+  public static VideoCamera startCamera(CameraConfig config) {
     System.out.println("Starting camera '" + config.name + "' on " + config.path);
     UsbCamera camera = new UsbCamera(config.name, config.path);
     MjpegServer mjpegServer = CameraServer.getInstance().startAutomaticCapture(camera);
@@ -314,7 +322,7 @@ public final class Main {
   public static NetworkTableEntry gsSize;
   public static NetworkTableEntry path;
   public static NetworkTableEntry neuralNetwork;
-  public static  NetworkTableEntry neuralNetworkConf;
+  public static NetworkTableEntry neuralNetworkConf;
   public static VideoSource frontCamera;
   public static CvSource outputStream;
   public static Scalar greenColor;
@@ -322,8 +330,8 @@ public final class Main {
   public static Scalar blueColor;
   public static Scalar blackColor;
   public static Scalar purpleColor;
-  public static VisionThread galaticSearchThread;
-  public static VisionThread powerTowerThread;
+
+  
 
   public static void main(String... args) {
     if (args.length > 0) {
@@ -347,14 +355,12 @@ public final class Main {
     }
 
     // Start cameras
-    List<VideoSource> cameras = new ArrayList<>();
-
     for (CameraConfig cameraConfig : cameraConfigs) {
       cameras.add(startCamera(cameraConfig));
     }
 
-    ShuffleboardTab tab = Shuffleboard.getTab("Power Tower");
-    NetworkTableEntry xOffset = tab.add("PT Offset", 0).getEntry();
+    ShuffleboardTab tab = Shuffleboard.getTab("PowerTower");
+    xOffset = tab.add("PT Offset", 0).getEntry();
 
     NetworkTable table = ntinst.getTable("PowerTower");
 
@@ -364,7 +370,7 @@ public final class Main {
     heightEntry = table.getEntry("height");
     difference = table.getEntry("difference");
 
-    NetworkTable gsTable = ntinst.getTable("GalaticSearch");
+    NetworkTable gsTable = ntinst.getTable("GalacticSearch");
 
     gsX = gsTable.getEntry("x");
     gsY = gsTable.getEntry("y");
@@ -375,23 +381,26 @@ public final class Main {
 
     CvSink cvSink = new CvSink("openCV Camera");
 
-    //Mat openCVOverlay = new Mat();
+    // Mat openCVOverlay = new Mat();
 
     // Start image processing on camera 0 if present
     if (cameras.size() >= 1) {
 
       // For OpenCV processing, you need a "source" which will be our camera and
-      // a "sink" or "destination" which will be an ouputStream that is fed into 
-      // an MJPEG Server. 
-      // TODO - this will always get the first camera detected and that may be the back camera which is no bueno
+      // a "sink" or "destination" which will be an ouputStream that is fed into
+      // an MJPEG Server.
+      // TODO - this will always get the first camera detected and that may be the
+      // back camera which is no bueno
       frontCamera = cameras.get(0);
 
       cvSink.setSource(frontCamera);
       outputStream = new CvSource("2228_OpenCV", PixelFormat.kMJPEG, (int) IMAGE_WIDTH_PIXELS,
           (int) IMAGE_HEIGHT_PIXELS, DEFAULT_FRAME_RATE);
 
-      // This is MJPEG server used to create an overlaid image of what the OpenCV processing is 
-      // coming up with on top of the live streamed image from the robot's front camera.
+      // This is MJPEG server used to create an overlaid image of what the OpenCV
+      // processing is
+      // coming up with on top of the live streamed image from the robot's front
+      // camera.
       MjpegServer mjpegServer2 = new MjpegServer("serve_openCV", MJPEG_OPENCV_SERVER_PORT);
       mjpegServer2.setSource(outputStream);
 
@@ -401,13 +410,6 @@ public final class Main {
       blueColor = new Scalar(255.0, 0.0, 0.0);
       blackColor = new Scalar(0.0, 0.0, 0.0);
       purpleColor = new Scalar(255.0, 0.0, 255.0);
-
-      galaticSearchThread = null;
-      powerTowerThread = null;
-      
-      galaticSearchThread = makeGalacticSearch();
-
-      powerTowerThread = makePowerTower();
 
     } else {
       System.out.println("No cameras found");
@@ -425,84 +427,82 @@ public final class Main {
       NetworkTable visionModeTable = ntinst.getTable("Vision Mode");
       NetworkTableEntry selected;
       selected = visionModeTable.getEntry("selected");
-      // Start the thread's execution. Runs continuously until the program is terminated
+      // Start the thread's execution. Runs continuously until the program is
+      // terminated
 
-        visionMode = selected.getString(null); 
-        //System.out.println("Waiting for Shuffleboard choice... Mode: " + visionMode);
+      visionMode = selected.getString(null);
+      // System.out.println("Waiting for Shuffleboard choice... Mode: " + visionMode);
 
-        try {
-          Thread.sleep(300);
-        } catch (InterruptedException ex) {
-          return;
-        }
+      try {
+        Thread.sleep(300);
+      } catch (InterruptedException ex) {
+        return;
+      }
 
-        //System.out.println("Mode: " + visionMode);
-          if(!visionMode.equals(previousSelected)){
-            //this is the first time getting a mode
-            if(previousSelected == null){
-                if(visionMode.equals ("Galactic Search")){
-                  galaticSearchThread.start();
-                  currentVisionThread = galaticSearchThread;
-                  System.out.println("Starting Galactic Search");
-                }
-                else if(visionMode.equals ("Power Tower")){
-                  powerTowerThread.start();
-                  currentVisionThread = powerTowerThread;
-                  System.out.println("Starting Power Tower");
-                } else {
-                  visionMode = "other path we don't want";
-                  currentVisionThread = null;
-                }
-            }
-            //the mode has been changed, must destroy old thread
-             else{
-               try{
-              currentVisionThread.stop();
-              System.out.println("Stopping path");
-              currentVisionThread.join();
-              System.out.println("Path Stopped");
-               }
-               catch(Exception e){
-               }
-                if(visionMode.equals ("Galactic Search")){
-                  galaticSearchThread = makeGalacticSearch();
-                  galaticSearchThread.start();
-                  System.out.println("Starting Galactic Search");
-                  currentVisionThread = galaticSearchThread;
-                  System.out.println("Started Galactic Search");
-                }
-                else if(visionMode.equals ("Power Tower")){
-                  powerTowerThread = makePowerTower();
-                  powerTowerThread.start();
-                  System.out.println("Starting Power Tower");
-                  currentVisionThread = powerTowerThread;
-                  System.out.println("Started Power Tower");
-                } else {
-                  visionMode = "other path we don't want";
-                  
-                  currentVisionThread = null;
-                  System.out.println("Not a valid path");
-                }
-            }
+      // System.out.println("Mode: " + visionMode);
+      if (!visionMode.equals(previousSelected)) {
+        // this is the first time getting a mode
+        if (previousSelected == null) {
+          if (visionMode.equals("Galactic Search")) {
+            setCameraExposure(GS_CAMERA_EXPOSURE);
+            currentVisionThread = makeGalacticSearch();
+            currentVisionThread.start();
+            System.out.println("Starting Galactic Search");
+          } else if (visionMode.equals("Power Tower")) {
+            setCameraExposure(PT_CAMERA_EXPOSURE);
+            currentVisionThread = makePowerTower();
+            currentVisionThread.start();
+            System.out.println("Starting Power Tower");
+          } else {
+            visionMode = "other path we don't want";
+            currentVisionThread = null;
           }
-          previousSelected = visionMode;
-          //System.out.println("Vision mode: " + visionMode);
-          //System.out.println("Previous mode: " + previousSelected);
-        
-      
         }
-  
-}
-  private static VisionThread makeGalacticSearch(){
-    return new VisionThread(frontCamera, new GalaticSearch(), pipeline -> {
+        // the mode has been changed, must destroy old thread
+        else {
+          try {
+            currentVisionThread.stop();
+            System.out.println("Stopping path");
+            currentVisionThread.join();
+            System.out.println("Path Stopped");
+            currentVisionThread = null;
+          } catch (Exception e) {}
+          if (visionMode.equals("Galactic Search")) {
+            setCameraExposure(GS_CAMERA_EXPOSURE);
+            currentVisionThread = makeGalacticSearch();
+            currentVisionThread.start();
+            System.out.println("Started Galactic Search");
+          } else if (visionMode.equals("Power Tower")) {
+            setCameraExposure(PT_CAMERA_EXPOSURE);
+            currentVisionThread = makePowerTower();
+            currentVisionThread.start();
+            System.out.println("Started Power Tower");
+          } else {
+            visionMode = "other path we don't want";
+
+            currentVisionThread = null;
+            System.out.println("Not a valid path");
+          }
+        }
+      }
+      previousSelected = visionMode;
+      // System.out.println("Vision mode: " + visionMode);
+      // System.out.println("Previous mode: " + previousSelected);
+
+    }
+
+  }
+
+  private static VisionThread makeGalacticSearch() {
+    return new VisionThread(frontCamera, new GalacticSearch(), pipeline -> {
       MatOfKeyPoint blobs = pipeline.findBlobsOutput();
       List<KeyPoint> keyPoints = blobs.toList();
       int num = keyPoints.size();
-      //List<Number> xArray = new ArrayList<>();
-      //List<Number> yArray = new ArrayList<>();
-      //List<Number> sizeArray = new ArrayList<>();
+      // List<Number> xArray = new ArrayList<>();
+      // List<Number> yArray = new ArrayList<>();
+      // List<Number> sizeArray = new ArrayList<>();
 
-      //System.out.println(num);
+      // System.out.println(num);
       Number xArray[] = new Number[num];
       Number yArray[] = new Number[num];
       Number sizeArray[] = new Number[num];
@@ -512,88 +512,83 @@ public final class Main {
       int maxSize = 0;
       int maxGSX = 0;
       int minGSX = 9999;
-      int left =0;
-      int middle =0;
-      int right =0;
-      int i=0;
-      for(KeyPoint point : keyPoints) {
-        //xArray.add(point.pt.x);
+      int left = 0;
+      int middle = 0;
+      int right = 0;
+      int i = 0;
+      for (KeyPoint point : keyPoints) {
+        // xArray.add(point.pt.x);
         xArray[i] = point.pt.x;
         yArray[i] = point.pt.y;
         sizeArray[i] = point.size;
 
-        if(point.size < minSize){
-          minSize = (int)point.size;
+        if (point.size < minSize) {
+          minSize = (int) point.size;
         }
-        if(point.size > maxSize){
-          maxSize = (int)point.size;
+        if (point.size > maxSize) {
+          maxSize = (int) point.size;
         }
-        if(point.pt.x < minGSX){
+        if (point.pt.x < minGSX) {
           left = i;
-          minGSX = (int)point.pt.x;
+          minGSX = (int) point.pt.x;
         }
-        if(point.pt.x > maxGSX){
+        if (point.pt.x > maxGSX) {
           right = i;
-          maxGSX = (int)point.pt.x;
+          maxGSX = (int) point.pt.x;
         }
         i++;
       }
 
-      if(num == 3){
-        if (left == 0 && right == 2){
+      if (num == 3) {
+        if (left == 0 && right == 2) {
           middle = 1;
-        }
-        else if(left ==2 && right == 0){
+        } else if (left == 2 && right == 0) {
           middle = 1;
-        }
-        else if(left == 0 && right == 1){
+        } else if (left == 0 && right == 1) {
           middle = 2;
-        }
-        else if(left == 1 && right == 0){
+        } else if (left == 1 && right == 0) {
           middle = 2;
-        }
-        else if(left == 1 && right == 2){
+        } else if (left == 1 && right == 2) {
+          middle = 0;
+        } else if (left == 2 && right == 1) {
           middle = 0;
         }
-        else if(left == 2 && right == 1){
-          middle = 0;
-        }
-        if(maxSize - minSize >= (15 + GS_SIZE_OFFSET)){ //Red path
+        if (maxSize - minSize >= (15 + GS_SIZE_OFFSET)) { // Red path
 
-          if(xArray[middle].intValue() - xArray[left].intValue() > (120 + GS_X_OFFSET)){ // A path
-            //System.out.println("A red path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          if (xArray[middle].intValue() - xArray[left].intValue() > (120 + GS_X_OFFSET)) { // A path
+            // System.out.println("A red path: " + (xArray[middle].intValue() -
+            // xArray[left].intValue()) + " " + (maxSize - minSize));
             pathFind = "aRed";
-          }
-          else{ // B path
-            //System.out.println("B red path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          } else { // B path
+            // System.out.println("B red path: " + (xArray[middle].intValue() -
+            // xArray[left].intValue()) + " " + (maxSize - minSize));
             pathFind = "bRed";
           }
 
-        }
-        else{ //Blue path
+        } else { // Blue path
 
-          if(xArray[right].intValue() - xArray[middle].intValue() > (120 + GS_X_OFFSET)){ // A path
-            //System.out.println("A blue path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          if (xArray[right].intValue() - xArray[middle].intValue() > (120 + GS_X_OFFSET)) { // A path
+            // System.out.println("A blue path: " + (xArray[middle].intValue() -
+            // xArray[left].intValue()) + " " + (maxSize - minSize));
             pathFind = "aBlue";
-          }
-          else{ // B path
-            //System.out.println("B blue path: " + (xArray[middle].intValue() - xArray[left].intValue()) + "   " + (maxSize - minSize));
+          } else { // B path
+            // System.out.println("B blue path: " + (xArray[middle].intValue() -
+            // xArray[left].intValue()) + " " + (maxSize - minSize));
             pathFind = "bBlue";
           }
 
         }
-      }
-      else{
-        //System.out.println("sees " + num + " balls");
+      } else {
+        // System.out.println("sees " + num + " balls");
       }
       gsX.setNumberArray(xArray);
       gsY.setNumberArray(yArray);
       gsSize.setNumberArray(sizeArray);
-      System.out.println("Setting path: " + pathFind); 
+      System.out.println("Setting path: " + pathFind);
       path.setString(pathFind);
-      
+
       Mat openCVOverlay = pipeline.cvFlipOutput();
-      GalaticSearchNeuralNetwork.Prediction prediction = galacticSearchNN.predictLabel(openCVOverlay);
+      GalacticSearchNeuralNetwork.Prediction prediction = galacticSearchNN.predictLabel(openCVOverlay);
 
       outputStream.putFrame(openCVOverlay);
       neuralNetwork.setString(prediction.label);
@@ -601,17 +596,17 @@ public final class Main {
     });
   }
 
-  private static VisionThread makePowerTower(){
+  private static VisionThread makePowerTower() {
     return new VisionThread(frontCamera, new PowerTowerPipline(), pipeline -> {
       // This grabs a snapshot of the live image currently being streamed
-      //cvSink.grabFrame(openCVOverlay);
+      // cvSink.grabFrame(openCVOverlay);
       Mat openCVOverlay = pipeline.cvFlipOutput();
 
       double xOff = xOffset.getDouble(0.0);
       // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
       Imgproc.line(openCVOverlay, new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, 25),
           new Point((IMAGE_HEIGHT_PIXELS / 2) + xOff, IMAGE_WIDTH_PIXELS - 10), greenColor, 3, 4);
-          double greenX = (IMAGE_HEIGHT_PIXELS / 2) + xOff;
+      double greenX = (IMAGE_HEIGHT_PIXELS / 2) + xOff;
 
       ArrayList<MatOfPoint> convexHullsOutput = pipeline.convexHullsOutput();
 
@@ -622,7 +617,6 @@ public final class Main {
       double width;
       double height;
 
-
       for (MatOfPoint points : convexHullsOutput) {
         double current_min_x = minx;
         double current_min_y = miny;
@@ -630,24 +624,24 @@ public final class Main {
         double current_max_y = maxy;
         boolean isValid = true;
         for (Point point : points.toArray()) {
-          if(point.y < 10){
+          if (point.y < 10) {
             isValid = false;
             break;
           }
-          if(point.x < minx){
+          if (point.x < minx) {
             minx = point.x;
           }
-          if(point.x > maxx){
+          if (point.x > maxx) {
             maxx = point.x;
           }
-          if(point.y < miny){
+          if (point.y < miny) {
             miny = point.y;
           }
-          if(point.y < maxy){
+          if (point.y < maxy) {
             maxy = point.y;
           }
         }
-        if(isValid == false){
+        if (isValid == false) {
           minx = current_min_x;
           maxx = current_max_x;
           miny = current_min_y;
@@ -657,30 +651,34 @@ public final class Main {
       width = maxx - minx;
       height = maxy - miny;
 
-      //System.out.println("X: " + minx);
+      // System.out.println("X: " + minx);
       xEntryPT.setDouble(minx);
       yEntryPT.setDouble(miny);
       widthEntry.setDouble(width);
       heightEntry.setDouble(height);
 
       // Draw a vertical line down the center of the image (i.e., IMAGE_WIDTH / 2)
-      //PI CAMERA EXPOSURE NEEDS TO BE CHANGED.
-      //TURN ON MANUAL EXPOSURE, AND EXPOSURE 5
-      Imgproc.line(openCVOverlay,
-        new Point((minx + width/2), 25),
-        new Point((minx + width/2), IMAGE_WIDTH_PIXELS - 10),
-        redColor, 3, 4);
-        double redX = minx + width/2;
+      // PI CAMERA EXPOSURE NEEDS TO BE CHANGED.
+      // TURN ON MANUAL EXPOSURE, AND EXPOSURE 5
+      Imgproc.line(openCVOverlay, new Point((minx + width / 2), 25),
+          new Point((minx + width / 2), IMAGE_WIDTH_PIXELS - 10), redColor, 3, 4);
+      double redX = minx + width / 2;
       // This overlays all of the OpenCV stuff (bounding rectangles, text, etc.) over
       // the streaming image
       outputStream.putFrame(openCVOverlay);
       difference.setDouble(greenX - redX);
     });
   }
+
+
+  public static void setCameraExposure(int value){
+    for(VideoCamera camera : cameras){
+      if (value >= 0){
+        camera.setExposureManual(value);
+      }
+      else{
+        camera.setExposureAuto();
+      }
+    }
+  }
 }
-
-
-
-
-
-  

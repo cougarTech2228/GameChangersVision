@@ -11,7 +11,7 @@ import org.opencv.dnn.Dnn;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.imgcodecs.Imgcodecs;
 
-public class GalaticSearchNeuralNetwork {
+public class GalacticSearchNeuralNetwork {
     private static final Scalar MEAN = new Scalar(0.485, 0.456, 0.406);
     private static final Scalar STD = new Scalar(0.229, 0.224, 0.225);
     private static final double SCALE_FACTOR = 1 / 255.0;
@@ -29,7 +29,7 @@ public class GalaticSearchNeuralNetwork {
         System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
     }
 
-    public GalaticSearchNeuralNetwork() {
+    public GalacticSearchNeuralNetwork() {
         imgLabels.add("aRed");
         imgLabels.add("bRed");
         imgLabels.add("aBlue");

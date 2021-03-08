@@ -26,7 +26,7 @@ import org.opencv.objdetect.*;
 *
 * @author GRIP
 */
-public class GalaticSearch implements VisionPipeline {
+public class GalacticSearch implements VisionPipeline {
 
 	//Outputs
 	private Mat cvTransposeOutput = new Mat();
